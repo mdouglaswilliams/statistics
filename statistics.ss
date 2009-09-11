@@ -55,14 +55,171 @@
 (define (statistics-standard-deviation statistics)
   (sqrt (statistics-variance statistics)))
 
+;;; Dispatching for and for/fold
+
+;;; (dispatch-for (for-clause ...)
+;;;   body ...+)
+(define-syntax dispatch-for
+  (syntax-rules (rewrite-for-clauses)
+    ((dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      ()
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (cond ((and . vector-cond-expr-terms)
+            (for vector-for-clauses
+              expr ...))
+           ((and . list-cond-expr-terms)
+            (for list-for-clauses
+              expr ...))
+           (else
+            (for general-for-clauses
+              expr ...))))
+    ((dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      ((id (sequence-type . sequence-args)) . rest-for-clauses)
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      rest-for-clauses
+      vector-cond-expr-terms
+      ((id (sequence-type . sequence-args)) . vector-for-clauses)
+      list-cond-expr-terms
+      ((id (sequence-type . sequence-args)) . list-for-clauses)
+      expr ...))
+    ((dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      ((id data) . rest-for-clauses)
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      rest-for-clauses
+      ((vector? data) . vector-cond-expr-terms)
+      ((id (in-vector data)) . vector-for-clauses)
+      ((pair? data) . list-cond-expr-terms)
+      ((id (in-list data)) . list-for-clauses)
+      expr ...))
+    ((dispatch-for
+      general-for-clauses
+      expr ...)
+     (dispatch-for
+      rewrite-for-clauses
+      general-for-clauses
+      general-for-clauses
+      ()
+      ()
+      ()
+      ()
+      expr ...))
+    ))
+
+;;; (dispatch-for/fold (accumulator-clause ...)
+;;;                    (for-clause ...)
+;;;   body ...+)
+(define-syntax dispatch-for/fold
+  (syntax-rules (rewrite-for-clauses)
+    ((dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      ()
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (cond ((and . vector-cond-expr-terms)
+            (for/fold accumulator-clauses
+                      vector-for-clauses
+              expr ...))
+           ((and . list-cond-expr-terms)
+            (for/fold accumulator-clauses
+                      list-for-clauses
+              expr ...))
+           (else
+            (for/fold accumulator-clauses
+                      general-for-clauses
+              expr ...))))
+    ((dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      ((id (sequence-type . sequence-args)) . rest-for-clauses)
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      rest-for-clauses
+      vector-cond-expr-terms
+      ((id (sequence-type . sequence-args)) . vector-for-clauses)
+      list-cond-expr-terms
+      ((id (sequence-type . sequence-args)) . list-for-clauses)
+      expr ...))
+    ((dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      ((id data) . rest-for-clauses)
+      vector-cond-expr-terms
+      vector-for-clauses
+      list-cond-expr-terms
+      list-for-clauses
+      expr ...)
+     (dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      rest-for-clauses
+      ((vector? data) . vector-cond-expr-terms)
+      ((id (in-vector data)) . vector-for-clauses)
+      ((pair? data) . list-cond-expr-terms)
+      ((id (in-list data)) . list-for-clauses)
+      expr ...))
+    ((dispatch-for/fold
+      accumulator-clauses
+      general-for-clauses
+      expr ...)
+     (dispatch-for/fold
+      rewrite-for-clauses
+      accumulator-clauses
+      general-for-clauses
+      general-for-clauses
+      ()
+      ()
+      ()
+      ()
+      expr ...))
+    ))
+      
 ;;; Mean and Standard Deviation and Variance
 
 ;;; (mean data) -> real?
 ;;;   data : sequence-of-real?
 (define (mean data)
-  (for/fold ((m-old 0.0))
-            ((i (in-naturals))
-             (x data))
+  (dispatch-for/fold ((m-old 0.0))
+                     ((i (in-naturals))
+                      (x data))
     (+ m-old (/ (- x m-old) (add1 i)))))
 
 ;;; (compute-variance data mean) -> exact-nonnegative-integer?
@@ -70,9 +227,9 @@
 ;;;   data : sequence-of-real?
 ;;;   mean : real?
 (define (compute-variance data mean)
-  (for/fold ((i 0)
-             (v-old 0.0))
-            ((x data))
+  (dispatch-for/fold ((i 0)
+                      (v-old 0.0))
+                     ((x data))
     (let* ((n (add1 i))
            (delta (- x mean))
            (v-new (+ v-old (/ (- (* delta delta) v-old) (add1 i)))))
@@ -118,8 +275,8 @@
 ;;;   data : sequence-of-real?
 ;;;   mean : real? = (mean data)
 (define (sum-of-squares data (mean (mean data)))
-  (for/fold ((tss-old 0.0))
-            ((x data))
+  (dispatch-for/fold ((tss-old 0.0))
+                     ((x data))
     (let ((delta (- x mean)))
       (+ tss-old (* delta delta)))))
 
@@ -131,9 +288,9 @@
 (define (absolute-deviation data (mean (mean data)))
   (let-values
       (((n S)
-        (for/fold ((i 0)
-                   (sum 0.0))
-                  ((x data))
+        (dispatch-for/fold ((i 0)
+                            (sum 0.0))
+                           ((x data))
           (let ((delta (abs (- x mean))))
             (values (add1 i) (+ sum delta))))))
     (/ S n)))
@@ -147,9 +304,9 @@
 (define skew
   (case-lambda
     ((data mean sd)
-     (for/fold ((skew 0.0))
-               ((i (in-naturals))
-                (x data))
+     (dispatch-for/fold ((skew 0.0))
+                        ((i (in-naturals))
+                         (x data))
        (let ((delta (/ (- x mean) sd)))
          (+ skew (/ (- (* delta delta delta) skew) (add1 i))))))
     ((data)
@@ -165,9 +322,9 @@
   (case-lambda
     ((data mean sd)
      (let ((avg
-            (for/fold ((avg 0.0))
-                      ((i (in-naturals))
-                       (x data))
+            (dispatch-for/fold ((avg 0.0))
+                               ((i (in-naturals))
+                                (x data))
               (let ((delta (/ (- x mean) sd)))
                 (+ avg (/ (- (* delta delta delta delta) avg) (add1 i)))))))
        (- avg 3.0)))
@@ -184,11 +341,11 @@
 (define (lag-1-autocorrelation data (mean (mean data)))
   (let-values
       (((x-prev Q V)
-        (for/fold ((x-prev 0)
-                   (q-old 0.0)
-                   (v-old 0.0))
-                  ((i (in-naturals))
-                   (x data))
+        (dispatch-for/fold ((x-prev 0)
+                            (q-old 0.0)
+                            (v-old 0.0))
+                           ((i (in-naturals))
+                            (x data))
           (if (= i 0)
               (let ((delta (- x mean)))
                 (values x 0.0 (* delta delta)))
@@ -209,10 +366,10 @@
 (define (covariance data1 data2 (mean1 (mean data1)) (mean2 (mean data2)))
   (let-values
       (((n covariance)
-        (for/fold ((i 0)
-                   (covariance 0.0))
-                  ((x1 data1)
-                   (x2 data2))
+        (dispatch-for/fold ((i 0)
+                            (covariance 0.0))
+                           ((x1 data1)
+                            (x2 data2))
           (let* ((delta1 (- x1 mean1))
                  (delta2 (- x2 mean2))
                  (covariance-new
@@ -228,14 +385,14 @@
 (define (correlation data1 data2)
   (let-values
       (((sum-xsq sum-ysq sum-cross mean-x mean-y)
-        (for/fold ((sum-xsq 0.0)
-                   (sum-ysq 0.0)
-                   (sum-cross 0.0)
-                   (mean-x 0.0)
-                   (mean-y 0.0))
-                  ((i (in-naturals))
-                   (x data1)
-                   (y data2))
+        (dispatch-for/fold ((sum-xsq 0.0)
+                            (sum-ysq 0.0)
+                            (sum-cross 0.0)
+                            (mean-x 0.0)
+                            (mean-y 0.0))
+                           ((i (in-naturals))
+                            (x data1)
+                            (y data2))
           (if (= i 0)
               (values 0.0 0.0 0.0 x y)
               (let* ((ratio (/ i (+ i 1.0)))
@@ -256,11 +413,11 @@
 (define (weighted-mean weights data)
   (let-values
       (((W M)
-        (for/fold ((w-old 0.0)
-                   (m-old 0.0))
-                  ((i (in-naturals))
-                   (w weights)
-                   (x data))
+        (dispatch-for/fold ((w-old 0.0)
+                            (m-old 0.0))
+                          ((i (in-naturals))
+                           (w weights)
+                           (x data))
           (if (> w 0)
               (let* ((w-new (+ w-old w))
                      (m-new (+ m-old (* (- x m-old) (/ w w-new)))))
@@ -275,11 +432,11 @@
 ;;;   data : sequence-of-real?
 ;;;   wmean : real?
 (define (compute-weighted-variance weights data wmean)
-  (for/fold ((i 0)
-             (w-old 0.0)
-             (wv-old 0.0))
-            ((w weights)
-             (x data))
+  (dispatch-for/fold ((i 0)
+                      (w-old 0.0)
+                      (wv-old 0.0))
+                     ((w weights)
+                      (x data))
     (if (> w 0)
         (let* ((delta (- x wmean))
                (w-new (+ w-old w))
@@ -292,9 +449,9 @@
 (define (compute-factor weights)
   (let-values
       (((a b)
-        (for/fold ((a-old 0.0)
-                   (b-old 0.0))
-                  ((w weights))
+        (dispatch-for/fold ((a-old 0.0)
+                            (b-old 0.0))
+                           ((w weights))
           (if (> w 0)
               (values (+ a-old w) (+ b-old (* w w)))
               (values a-old b-old)))))
@@ -348,9 +505,9 @@
 ;;;   data : sequence-of-real?
 ;;;   wmean : real? = (weighted-mean weights data)
 (define (weighted-sum-of-squares weights data (wmean (weighted-mean weights data)))
-  (for/fold ((wtss-old 0.0))
-            ((w weights)
-             (x data))
+  (dispatch-for/fold ((wtss-old 0.0))
+                     ((w weights)
+                      (x data))
     (if (> w 0)
         (let ((delta (- x wmean)))
           (+ wtss-old (* w delta delta)))
@@ -363,10 +520,10 @@
 (define (weighted-absolute-deviation weights data (wmean (weighted-mean weights data)))
   (let-values
       (((W wabsdev)
-        (for/fold ((w-old 0.0)
-                   (wabsdev-old 0.0))
-                  ((w weights)
-                   (x data))
+        (dispatch-for/fold ((w-old 0.0)
+                            (wabsdev-old 0.0))
+                           ((w weights)
+                            (x data))
           (if (> w 0)
               (let* ((delta (abs (- x wmean)))
                      (w-new (+ w-old w))
@@ -386,15 +543,16 @@
     ((weights data wmean wsd)
      (let-values
          (((W wskew)
-           (for/fold ((w-old 0.0)
-                      (wskew-old 0.0))
-                     ((w weights)
-                      (x data))
+           (dispatch-for/fold ((w-old 0.0)
+                               (wskew-old 0.0))
+                              ((w weights)
+                               (x data))
              (if (> w 0)
                  (let* ((delta (/ (- x wmean) wsd))
                         (w-new (+ w-old w))
-                        (wskew-new (+ wskew-old (* (- (* delta delta delta) wskew-old)
-                                                   (/ w w-new)))))
+                        (wskew-new (+ wskew-old
+                                      (* (- (* delta delta delta) wskew-old)
+                                         (/ w w-new)))))
                    (values w-new wskew-new))
                  (values w-old wskew-old)))))
        wskew))
@@ -413,15 +571,16 @@
     ((weights data wmean wsd)
      (let-values
          (((W wavg)
-           (for/fold ((w-old 0.0)
-                      (wavg-old 0.0))
-                     ((w weights)
-                      (x data))
+           (dispatch-for/fold ((w-old 0.0)
+                               (wavg-old 0.0))
+                              ((w weights)
+                               (x data))
              (if (> w 0)
                  (let* ((delta (/ (- x wmean) wsd))
                         (w-new (+ w-old w))
-                        (wavg-new (+ wavg-old (* (- (* delta delta delta delta) wavg-old)
-                                                 (/ w w-new)))))
+                        (wavg-new (+ wavg-old
+                                     (* (- (* delta delta delta delta) wavg-old)
+                                        (/ w w-new)))))
                    (values w-new wavg-new))
                  (values w-old wavg-old)))))
        (- wavg 3.0)))
@@ -438,12 +597,12 @@
 ;;;                                       exact-nonnegative-integer?
 ;;;   data : nonempty-sequence-of-real?
 (define (minimum-maximum-and-indices data)
-  (for/fold ((min +inf.0)
-             (max -inf.0)
-             (min-ndx -1)
-             (max-ndx -1))
-            ((i (in-naturals))
-             (x data))
+  (dispatch-for/fold ((min +inf.0)
+                      (max -inf.0)
+                      (min-ndx -1)
+                      (max-ndx -1))
+                     ((i (in-naturals))
+                      (x data))
     (let ((min-new (if (< x min) x min))
           (max-new (if (> x max) x max))
           (min-ndx-new (if (< x min) i min-ndx))
@@ -556,7 +715,7 @@
    (lambda (s)
      (and (sequence? s)
           (let/ec exit
-            (for ((x s))
+            (dispatch-for ((x s))
               (unless (real? x)
                 (exit #f)))
             #t)))))
@@ -568,7 +727,7 @@
      (and (sequence? s)
           (let ((empty? #t))
             (let/ec exit
-              (for ((x s))
+              (dispatch-for ((x s))
                 (set! empty? #f)
                 (unless (real? x)
                   (exit #f)))

@@ -3,8 +3,8 @@
 (require (planet williams/science/random-distributions/gaussian)
          (planet williams/science/math)
          ;; use one or the other below
-         ;(planet williams/science/statistics)
-         "statistics.ss"
+         (planet williams/science/statistics)
+         ;"statistics.ss"
          )
 
 (define (test)
